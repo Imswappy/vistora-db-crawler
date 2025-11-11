@@ -1,6 +1,7 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;MODE=MySQL
+    # Keep H2 in-memory DB alive for the JVM lifetime and set MySQL mode for portability
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
     username: sa
     password: 
     driver-class-name: org.h2.Driver
@@ -9,13 +10,13 @@ spring:
       enabled: true
   jpa:
     enabled: false
+  sql:
+    # SQL initialization handled by DemoDataInitializer component
   application:
     name: MySQL Schema Crawler (Demo)
 
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 logging:
   level:
@@ -32,3 +33,4 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     enabled: true
+ 

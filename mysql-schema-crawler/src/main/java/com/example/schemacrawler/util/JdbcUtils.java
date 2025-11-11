@@ -13,13 +13,13 @@ import java.sql.SQLException;
 @Component
 public class JdbcUtils {
 
-    @Value("${spring.datasource.url}")
+    @Value("${spring.datasource.url:jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1}")
     private String url;
 
-    @Value("${spring.datasource.username}")
+    @Value("${spring.datasource.username:sa}")
     private String user;
 
-    @Value("${spring.datasource.password}")
+    @Value("${spring.datasource.password:}")
     private String password;
 
     /**

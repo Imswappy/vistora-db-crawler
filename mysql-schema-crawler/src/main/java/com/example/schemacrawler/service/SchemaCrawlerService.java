@@ -35,13 +35,24 @@ public class SchemaCrawlerService {
      * @return List of table names
      */
     public List<String> getAllTables() {
-        try {
-            String sql = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()";
-            return jdbcTemplate.queryForList(sql, String.class);
+        List<String> tables = new ArrayList<>();
+        try (Connection conn = jdbcUtils.getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+            try (ResultSet rs = metaData.getTables(conn.getCatalog(), null, "%", new String[]{"TABLE"})) {
+                while (rs.next()) {
+                    String tableName = rs.getString("TABLE_NAME");
+                    String tableSchema = rs.getString("TABLE_SCHEM");
+                    // skip H2/INFORMATION_SCHEMA tables
+                    if (tableSchema != null && tableSchema.toUpperCase().contains("INFORMATION_SCHEMA")) {
+                        continue;
+                    }
+                    tables.add(tableName);
+                }
+            }
         } catch (Exception e) {
             logger.error("Error retrieving tables", e);
-            return new ArrayList<>();
         }
+        return tables;
     }
 
     /**
@@ -169,15 +180,19 @@ public class SchemaCrawlerService {
      */
     public List<String> getForeignKeyConstraints(String tableName) {
         List<String> foreignKeys = new ArrayList<>();
-        String sql = "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE " +
-                     "WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL";
-        
-        try {
-            foreignKeys = jdbcTemplate.queryForList(sql, new Object[]{tableName}, String.class);
+        try (Connection conn = jdbcUtils.getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+            try (ResultSet rs = metaData.getImportedKeys(conn.getCatalog(), null, tableName)) {
+                while (rs.next()) {
+                    String fkName = rs.getString("FK_NAME");
+                    if (fkName != null && !foreignKeys.contains(fkName)) {
+                        foreignKeys.add(fkName);
+                    }
+                }
+            }
         } catch (Exception e) {
             logger.error("Error retrieving foreign keys for table: " + tableName, e);
         }
-        
         return foreignKeys;
     }
 
@@ -188,23 +203,21 @@ public class SchemaCrawlerService {
      */
     private Map<String, String[]> getForeignKeyMap(String tableName) {
         Map<String, String[]> fkMap = new HashMap<>();
-        String sql = "SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME " +
-                     "FROM information_schema.KEY_COLUMN_USAGE " +
-                     "WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL";
-        
-        try {
-            List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, tableName);
-            
-            for (Map<String, Object> row : results) {
-                String columnName = (String) row.get("COLUMN_NAME");
-                String refTable = (String) row.get("REFERENCED_TABLE_NAME");
-                String refColumn = (String) row.get("REFERENCED_COLUMN_NAME");
-                fkMap.put(columnName, new String[]{refTable, refColumn});
+        try (Connection conn = jdbcUtils.getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+            try (ResultSet rs = metaData.getImportedKeys(conn.getCatalog(), null, tableName)) {
+                while (rs.next()) {
+                    String columnName = rs.getString("FKCOLUMN_NAME");
+                    String refTable = rs.getString("PKTABLE_NAME");
+                    String refColumn = rs.getString("PKCOLUMN_NAME");
+                    if (columnName != null) {
+                        fkMap.put(columnName, new String[]{refTable, refColumn});
+                    }
+                }
             }
         } catch (Exception e) {
             logger.error("Error retrieving foreign key map for table: " + tableName, e);
         }
-        
         return fkMap;
     }
 
